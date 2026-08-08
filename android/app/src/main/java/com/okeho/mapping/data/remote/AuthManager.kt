@@ -3,6 +3,9 @@ package com.okeho.mapping.data.remote
 import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -32,7 +35,9 @@ object AuthManager {
             SupabaseClient.getClient().auth.signUpWith(Email) {
                 this.email = email
                 this.password = password
-                data = mapOf("full_name" to fullName)
+                data = buildJsonObject {
+                    put("full_name", fullName)
+                }
             }
             _isAuthenticated.value = true
             _currentUserEmail.value = email
