@@ -211,9 +211,10 @@ fun CaptureDetailsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     if (uiState.photoUri != null) {
-                        val bitmap = remember(uiState.photoUri) {
+                        val photoUri = uiState.photoUri!!
+                        val bitmap = remember(photoUri) {
                             try {
-                                context.contentResolver.openInputStream(uiState.photoUri)?.use { stream ->
+                                context.contentResolver.openInputStream(photoUri)?.use { stream ->
                                     BitmapFactory.decodeStream(stream)?.asImageBitmap()
                                 }
                             } catch (e: Exception) {
