@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
@@ -208,13 +211,24 @@ fun CaptureDetailsScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     if (uiState.photoUri != null) {
-                        Image(
-                            painter = rememberAsyncImagePainter(uiState.photoUri),
-                            contentDescription = "Captured photo",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                        )
+                        val bitmap = remember(uiState.photoUri) {
+                            try {
+                                context.contentResolver.openInputStream(uiState.photoUri)?.use { stream ->
+                                    BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                                }
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                        bitmap?.let { imageBitmap ->
+                            Image(
+                                bitmap = imageBitmap,
+                                contentDescription = "Captured photo",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(200.dp)
+                            )
+                        }
                     } else {
                         OutlinedButton(
                             onClick = {
