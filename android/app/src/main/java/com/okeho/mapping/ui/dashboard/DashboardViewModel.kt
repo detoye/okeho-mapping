@@ -38,6 +38,11 @@ class DashboardViewModel @Inject constructor(
             try {
                 withContext(Dispatchers.IO) {
                     val pendingCaptures = captureRepository.getPendingCaptures()
+                    Log.d("Sync", "Pending captures: ${pendingCaptures.size}")
+                    pendingCaptures.forEach { Log.d("Sync", "  id=${it.id} name=${it.name} status=${it.syncStatus}") }
+
+                    val pendingStreets = streetRepository.getPendingStreets()
+                    Log.d("Sync", "Pending streets: ${pendingStreets.size}")
                     var syncedCaptures = 0
                     for (capture in pendingCaptures) {
                         try {
