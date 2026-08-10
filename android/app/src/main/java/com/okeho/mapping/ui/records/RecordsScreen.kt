@@ -1,5 +1,6 @@
 package com.okeho.mapping.ui.records
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -23,10 +25,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -223,9 +229,37 @@ private fun CaptureCard(
     onDelete: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    var showDetails by remember { mutableStateOf(false) }
+
+    if (showDetails) {
+        AlertDialog(
+            onDismissRequest = { showDetails = false },
+            title = { Text(capture.name.ifBlank { capture.featureType.displayName }) },
+            text = {
+                Column {
+                    Text("Type: ${capture.featureType.displayName}")
+                    Text("Accuracy: ${String.format("%.1f", capture.accuracy)} m")
+                    Text("Lat: ${String.format("%.6f", capture.latitude)}")
+                    Text("Lng: ${String.format("%.6f", capture.longitude)}")
+                    if (!capture.ocrText.isNullOrBlank()) {
+                        Text("OCR: ${capture.ocrText}")
+                    }
+                    Text("Synced: ${capture.syncStatus.displayName}")
+                    Text("Date: ${dateFormat.format(Date(capture.createdAt))}")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDetails = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showDetails = true },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -284,9 +318,37 @@ private fun StreetCard(
     onDelete: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
+    var showDetails by remember { mutableStateOf(false) }
+
+    if (showDetails) {
+        AlertDialog(
+            onDismissRequest = { showDetails = false },
+            title = { Text(street.name.ifBlank { "Unnamed Street" }) },
+            text = {
+                Column {
+                    Text("Surface: ${street.surfaceType.displayName}")
+                    Text("Traffic: ${street.trafficDirection.displayName}")
+                    Text("Points: ${street.points.size}")
+                    if (street.points.isNotEmpty()) {
+                        Text("First point: ${String.format("%.6f", street.points.first().first)}, ${String.format("%.6f", street.points.first().second)}")
+                        Text("Last point: ${String.format("%.6f", street.points.last().first)}, ${String.format("%.6f", street.points.last().second)}")
+                    }
+                    Text("Synced: ${street.syncStatus.displayName}")
+                    Text("Date: ${dateFormat.format(Date(street.createdAt))}")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDetails = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { showDetails = true },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
