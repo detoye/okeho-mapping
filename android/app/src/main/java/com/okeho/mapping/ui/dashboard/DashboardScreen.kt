@@ -47,43 +47,18 @@ import androidx.core.content.ContextCompat
 import com.okeho.mapping.data.remote.SupabaseClient
 import com.okeho.mapping.domain.model.SyncStatus
 import com.okeho.mapping.domain.repository.CaptureRepository
-import com.okeho.mapping.domain.repository.StreetRepository
+import com.okeho.mapping.data.remote.CaptureDto
+import com.okeho.mapping.data.remote.StreetDto
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
-
-@Serializable
-data class CaptureDto(
-    val id: String,
-    val user_id: String,
-    val name: String,
-    val feature_type: String,
-    val latitude: Double,
-    val longitude: Double,
-    val accuracy: Float,
-    val photo_url: String? = null,
-    val ocr_text: String? = null,
-    val sync_status: String = "synced"
-)
-
-@Serializable
-data class StreetDto(
-    val id: String,
-    val user_id: String,
-    val name: String,
-    val surface_type: String,
-    val traffic_direction: String,
-    val points_captured: Int,
-    val sync_status: String = "synced"
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
