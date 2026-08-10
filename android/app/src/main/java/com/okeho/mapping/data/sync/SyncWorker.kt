@@ -83,7 +83,7 @@ class SyncWorker @AssistedInject constructor(
 
                 SupabaseClient.getClient()
                     .from("captures")
-                    .upsert(dto)
+                    .insert(dto)
 
                 captureRepository.updateSyncStatus(capture.id, SyncStatus.SYNCED.name)
                 synced++
@@ -113,7 +113,7 @@ class SyncWorker @AssistedInject constructor(
 
                 SupabaseClient.getClient()
                     .from("streets")
-                    .upsert(dto)
+                    .insert(dto)
 
                 streetRepository.updateSyncStatus(street.id, SyncStatus.SYNCED.name)
                 synced++
