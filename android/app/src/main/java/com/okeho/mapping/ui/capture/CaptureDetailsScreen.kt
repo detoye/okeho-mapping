@@ -94,6 +94,16 @@ fun CaptureDetailsScreen(
         }
     }
 
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            uiState.photoUri?.let { uri ->
+                viewModel.extractTextFromImage(context, uri)
+            }
+        }
+    }
+
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -102,16 +112,6 @@ fun CaptureDetailsScreen(
             pendingPhotoUri?.let { uri ->
                 viewModel.setPhotoUri(uri)
                 cameraLauncher.launch(uri)
-            }
-        }
-    }
-
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            uiState.photoUri?.let { uri ->
-                viewModel.extractTextFromImage(context, uri)
             }
         }
     }
