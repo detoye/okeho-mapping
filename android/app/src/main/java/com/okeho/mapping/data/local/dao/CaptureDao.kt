@@ -17,7 +17,7 @@ interface CaptureDao {
     @Query("SELECT * FROM captures WHERE id = :id")
     suspend fun getCaptureById(id: String): CaptureEntity?
 
-    @Query("SELECT * FROM captures WHERE syncStatus = 'PENDING'")
+    @Query("SELECT * FROM captures WHERE syncStatus IN ('PENDING', 'FAILED')")
     suspend fun getPendingCaptures(): List<CaptureEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

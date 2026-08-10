@@ -17,7 +17,7 @@ interface StreetDao {
     @Query("SELECT * FROM streets WHERE id = :id")
     suspend fun getStreetById(id: String): StreetEntity?
 
-    @Query("SELECT * FROM streets WHERE syncStatus = 'PENDING'")
+    @Query("SELECT * FROM streets WHERE syncStatus IN ('PENDING', 'FAILED')")
     suspend fun getPendingStreets(): List<StreetEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

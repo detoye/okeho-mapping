@@ -1,6 +1,5 @@
 package com.okeho.mapping.ui.dashboard
 
-import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,7 +10,6 @@ import com.okeho.mapping.domain.model.SyncStatus
 import com.okeho.mapping.domain.repository.CaptureRepository
 import com.okeho.mapping.domain.repository.StreetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.math.BigDecimal
 import javax.inject.Inject
 
 data class SyncResult(val message: String, val success: Boolean)
@@ -36,72 +35,96 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _syncState.value = "Syncing..."
             try {
-                withContext(Dispatchers.IO) {
-                    val pendingCaptures = captureRepository.getPendingCaptures()
-                    Log.d("Sync", "Pending captures: ${pendingCaptures.size}")
-                    pendingCaptures.forEach { Log.d("Sync", "  id=${it.id} name=${it.name} status=${it.syncStatus}") }
-
-                    var syncedCaptures = 0
-                    for (capture in pendingCaptures) {
-                        try {
-                            val dto = CaptureDto(
-                                id = capture.id,
-                                user_id = capture.userId.ifBlank { "anonymous" },
-                                name = capture.name,
-                                feature_type = capture.featureType.name,
-                                latitude = capture.latitude,
-                                longitude = capture.longitude,
-                                accuracy = capture.accuracy,
-                                photo_url = capture.photoUrl,
-                                ocr_text = capture.ocrText,
-                                sync_status = "synced"
-                            )
-                            SupabaseClient.getClient().from("captures").insert(dto)
-                            captureRepository.updateSyncStatus(capture.id, SyncStatus.SYNCED.name)
-                            syncedCaptures++
-                        } catch (e: Exception) {
-                            Log.e("Sync", "Failed to sync capture ${capture.id}", e)
-                            captureRepository.updateSyncStatus(capture.id, SyncStatus.FAILED.name)
-                        }
-                    }
-
-                    val pendingStreets = streetRepository.getPendingStreets()
-                    Log.d("Sync", "Pending streets: ${pendingStreets.size}")
-                    var syncedStreets = 0
-                    for (street in pendingStreets) {
-                        try {
-                            val dto = StreetDto(
-                                id = street.id,
-                                user_id = street.userId.ifBlank { "anonymous" },
-                                name = street.name,
-                                surface_type = street.surfaceType.name,
-                                traffic_direction = street.trafficDirection.name,
-                                points_captured = street.points.size,
-                                sync_status = "synced"
-                            )
-                            SupabaseClient.getClient().from("streets").insert(dto)
-                            streetRepository.updateSyncStatus(street.id, SyncStatus.SYNCED.name)
-                            syncedStreets++
-                        } catch (e: Exception) {
-                            Log.e("Sync", "Failed to sync street ${street.id}", e)
-                            streetRepository.updateSyncStatus(street.id, SyncStatus.FAILED.name)
-                        }
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        val msg = "Synced $syncedCaptures captures, $syncedStreets streets"
-                        _syncState.value = msg
-                        onDone(msg)
-                    }
-                }
+                val msg = withContext(Dispatchers.IO) { runSync() }
+                _syncState.value = msg
+                onDone(msg)
             } catch (e: Exception) {
                 Log.e("Sync", "Sync failed", e)
-                withContext(Dispatchers.Main) {
-                    val msg = "Sync failed: ${e.message}"
-                    _syncState.value = msg
-                    onDone(msg)
-                }
+                val msg = "Sync failed: ${e.message}"
+                _syncState.value = msg
+                onDone(msg)
             }
         }
     }
+
+    private suspend fun runSync(): String {
+        val client = SupabaseClient.getClient()
+
+        val pendingCaptures = captureRepository.getPendingCaptures()
+        Log.d("Sync", "Pending captures: ${pendingCaptures.size}")
+
+        var syncedCaptures = 0
+        var failed = 0
+        for (capture in pendingCaptures) {
+            try {
+                val dto = CaptureDto(
+                    id = capture.id,
+                    user_id = capture.userId.ifBlank { null },
+                    name = capture.name,
+                    feature_type = capture.featureType.name.lowercase(),
+                    geometry = pointWkt(capture.latitude, capture.longitude),
+                    accuracy = capture.accuracy,
+                    photo_url = capture.photoUrl,
+                    ocr_text = capture.ocrText,
+                    sync_status = "synced"
+                )
+                client.from("captures").upsert(dto)
+                captureRepository.updateSyncStatus(capture.id, SyncStatus.SYNCED.name)
+                syncedCaptures++
+            } catch (e: Exception) {
+                Log.e("Sync", "Failed to sync capture ${capture.id}", e)
+                captureRepository.updateSyncStatus(capture.id, SyncStatus.FAILED.name)
+                failed++
+            }
+        }
+
+        val pendingStreets = streetRepository.getPendingStreets()
+        Log.d("Sync", "Pending streets: ${pendingStreets.size}")
+
+        var syncedStreets = 0
+        for (street in pendingStreets) {
+            // A LINESTRING needs at least two vertices; anything less can never sync.
+            if (street.points.size < 2) {
+                Log.w("Sync", "Skipping street ${street.id}: only ${street.points.size} point(s)")
+                failed++
+                continue
+            }
+            try {
+                val dto = StreetDto(
+                    id = street.id,
+                    user_id = street.userId.ifBlank { null },
+                    name = street.name,
+                    geometry = lineWkt(street.points),
+                    surface_type = street.surfaceType.name.lowercase(),
+                    traffic_direction = street.trafficDirection.name.lowercase(),
+                    points_captured = street.points.size,
+                    sync_status = "synced"
+                )
+                client.from("streets").upsert(dto)
+                streetRepository.updateSyncStatus(street.id, SyncStatus.SYNCED.name)
+                syncedStreets++
+            } catch (e: Exception) {
+                Log.e("Sync", "Failed to sync street ${street.id}", e)
+                streetRepository.updateSyncStatus(street.id, SyncStatus.FAILED.name)
+                failed++
+            }
+        }
+
+        return buildString {
+            append("Synced $syncedCaptures captures, $syncedStreets streets")
+            if (failed > 0) append(" ($failed failed)")
+        }
+    }
+
+    // WKT axis order is X Y, so longitude comes before latitude.
+    private fun pointWkt(latitude: Double, longitude: Double) =
+        "SRID=4326;POINT(${coord(longitude)} ${coord(latitude)})"
+
+    private fun lineWkt(points: List<Pair<Double, Double>>) =
+        points.joinToString(",", prefix = "SRID=4326;LINESTRING(", postfix = ")") {
+            "${coord(it.second)} ${coord(it.first)}"
+        }
+
+    /** Avoids the scientific notation Double.toString() emits for small magnitudes. */
+    private fun coord(value: Double) = BigDecimal.valueOf(value).toPlainString()
 }
