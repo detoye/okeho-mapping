@@ -74,12 +74,35 @@ fun CaptureDetailsScreen(
         )
     }
 
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    var pendingPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
         if (hasLocationPermission) {
             viewModel.startGpsCapture(context)
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (granted) {
+            pendingPhotoUri?.let { uri ->
+                viewModel.setPhotoUri(uri)
+                cameraLauncher.launch(uri)
+            }
         }
     }
 
@@ -241,8 +264,13 @@ fun CaptureDetailsScreen(
                                     "${context.packageName}.fileprovider",
                                     photoFile
                                 )
-                                viewModel.setPhotoUri(uri)
-                                cameraLauncher.launch(uri)
+                                if (hasCameraPermission) {
+                                    viewModel.setPhotoUri(uri)
+                                    cameraLauncher.launch(uri)
+                                } else {
+                                    pendingPhotoUri = uri
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
