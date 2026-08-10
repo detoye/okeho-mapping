@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -18,10 +17,11 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,18 +44,46 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.work.Constraints
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import com.okeho.mapping.data.sync.SyncWorker
+import com.okeho.mapping.data.remote.SupabaseClient
+import com.okeho.mapping.domain.model.SyncStatus
+import com.okeho.mapping.domain.repository.CaptureRepository
+import com.okeho.mapping.domain.repository.StreetRepository
+import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+
+@Serializable
+data class CaptureDto(
+    val id: String,
+    val user_id: String,
+    val name: String,
+    val feature_type: String,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy: Float,
+    val photo_url: String? = null,
+    val ocr_text: String? = null,
+    val sync_status: String = "synced"
+)
+
+@Serializable
+data class StreetDto(
+    val id: String,
+    val user_id: String,
+    val name: String,
+    val surface_type: String,
+    val traffic_direction: String,
+    val points_captured: Int,
+    val sync_status: String = "synced"
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,6 +96,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val isSyncing = remember { mutableStateOf(false) }
 
     val hasLocationPermission = remember {
         mutableStateOf(
@@ -104,6 +133,80 @@ fun DashboardScreen(
 
     val mapView = remember { mutableStateOf<MapView?>(null) }
 
+    fun doSync() {
+        scope.launch {
+            isSyncing.value = true
+            try {
+                withContext(Dispatchers.IO) {
+                    val captureRepo = com.okeho.mapping.di.SyncHelper.captureRepository
+                    val streetRepo = com.okeho.mapping.di.SyncHelper.streetRepository
+
+                    val pendingCaptures = captureRepo.getPendingCaptures()
+                    var syncedCaptures = 0
+                    for (capture in pendingCaptures) {
+                        try {
+                            val dto = CaptureDto(
+                                id = capture.id,
+                                user_id = capture.userId.ifBlank { "anonymous" },
+                                name = capture.name,
+                                feature_type = capture.featureType.name,
+                                latitude = capture.latitude,
+                                longitude = capture.longitude,
+                                accuracy = capture.accuracy,
+                                photo_url = capture.photoUrl,
+                                ocr_text = capture.ocrText,
+                                sync_status = "synced"
+                            )
+                            SupabaseClient.getClient().from("captures").insert(dto)
+                            captureRepo.updateSyncStatus(capture.id, SyncStatus.SYNCED.name)
+                            syncedCaptures++
+                        } catch (e: Exception) {
+                            android.util.Log.e("Sync", "Failed to sync capture ${capture.id}", e)
+                            captureRepo.updateSyncStatus(capture.id, SyncStatus.FAILED.name)
+                        }
+                    }
+
+                    val pendingStreets = streetRepo.getPendingStreets()
+                    var syncedStreets = 0
+                    for (street in pendingStreets) {
+                        try {
+                            val dto = StreetDto(
+                                id = street.id,
+                                user_id = street.userId.ifBlank { "anonymous" },
+                                name = street.name,
+                                surface_type = street.surfaceType.name,
+                                traffic_direction = street.trafficDirection.name,
+                                points_captured = street.points.size,
+                                sync_status = "synced"
+                            )
+                            SupabaseClient.getClient().from("streets").insert(dto)
+                            streetRepo.updateSyncStatus(street.id, SyncStatus.SYNCED.name)
+                            syncedStreets++
+                        } catch (e: Exception) {
+                            android.util.Log.e("Sync", "Failed to sync street ${street.id}", e)
+                            streetRepo.updateSyncStatus(street.id, SyncStatus.FAILED.name)
+                        }
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            context,
+                            "Synced $syncedCaptures captures, $syncedStreets streets",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("Sync", "Sync failed", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Sync failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                isSyncing.value = false
+            }
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -114,7 +217,7 @@ fun DashboardScreen(
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
-                Divider()
+                HorizontalDivider()
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.List, contentDescription = null) },
                     label = { Text("View Records") },
@@ -150,20 +253,12 @@ fun DashboardScreen(
                     }
                 )
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.MyLocation, contentDescription = null) },
-                    label = { Text("Sync Now") },
+                    icon = { Icon(Icons.Default.Sync, contentDescription = null) },
+                    label = { Text(if (isSyncing.value) "Syncing..." else "Sync Now") },
                     selected = false,
                     onClick = {
                         scope.launch { drawerState.close() }
-                        val workRequest = OneTimeWorkRequestBuilder<SyncWorker>()
-                            .setConstraints(
-                                Constraints.Builder()
-                                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                                    .build()
-                            )
-                            .build()
-                        WorkManager.getInstance(context).enqueue(workRequest)
-                        Toast.makeText(context, "Sync started...", Toast.LENGTH_SHORT).show()
+                        doSync()
                     }
                 )
             }
