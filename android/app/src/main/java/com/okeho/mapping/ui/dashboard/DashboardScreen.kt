@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,15 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.okeho.mapping.data.remote.SupabaseClient
-import com.okeho.mapping.domain.model.SyncStatus
-import com.okeho.mapping.domain.repository.CaptureRepository
-import com.okeho.mapping.data.remote.CaptureDto
-import com.okeho.mapping.data.remote.StreetDto
-import io.github.jan.supabase.postgrest.from
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import androidx.hilt.navigation.compose.hiltViewModel
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -72,6 +63,7 @@ fun DashboardScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val isSyncing = remember { mutableStateOf(false) }
+    val viewModel: DashboardViewModel = hiltViewModel()
 
     val hasLocationPermission = remember {
         mutableStateOf(
@@ -109,76 +101,10 @@ fun DashboardScreen(
     val mapView = remember { mutableStateOf<MapView?>(null) }
 
     fun doSync() {
-        scope.launch {
-            isSyncing.value = true
-            try {
-                withContext(Dispatchers.IO) {
-                    val captureRepo = com.okeho.mapping.di.SyncHelper.captureRepository
-                    val streetRepo = com.okeho.mapping.di.SyncHelper.streetRepository
-
-                    val pendingCaptures = captureRepo.getPendingCaptures()
-                    var syncedCaptures = 0
-                    for (capture in pendingCaptures) {
-                        try {
-                            val dto = CaptureDto(
-                                id = capture.id,
-                                user_id = capture.userId.ifBlank { "anonymous" },
-                                name = capture.name,
-                                feature_type = capture.featureType.name,
-                                latitude = capture.latitude,
-                                longitude = capture.longitude,
-                                accuracy = capture.accuracy,
-                                photo_url = capture.photoUrl,
-                                ocr_text = capture.ocrText,
-                                sync_status = "synced"
-                            )
-                            SupabaseClient.getClient().from("captures").insert(dto)
-                            captureRepo.updateSyncStatus(capture.id, SyncStatus.SYNCED.name)
-                            syncedCaptures++
-                        } catch (e: Exception) {
-                            android.util.Log.e("Sync", "Failed to sync capture ${capture.id}", e)
-                            captureRepo.updateSyncStatus(capture.id, SyncStatus.FAILED.name)
-                        }
-                    }
-
-                    val pendingStreets = streetRepo.getPendingStreets()
-                    var syncedStreets = 0
-                    for (street in pendingStreets) {
-                        try {
-                            val dto = StreetDto(
-                                id = street.id,
-                                user_id = street.userId.ifBlank { "anonymous" },
-                                name = street.name,
-                                surface_type = street.surfaceType.name,
-                                traffic_direction = street.trafficDirection.name,
-                                points_captured = street.points.size,
-                                sync_status = "synced"
-                            )
-                            SupabaseClient.getClient().from("streets").insert(dto)
-                            streetRepo.updateSyncStatus(street.id, SyncStatus.SYNCED.name)
-                            syncedStreets++
-                        } catch (e: Exception) {
-                            android.util.Log.e("Sync", "Failed to sync street ${street.id}", e)
-                            streetRepo.updateSyncStatus(street.id, SyncStatus.FAILED.name)
-                        }
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(
-                            context,
-                            "Synced $syncedCaptures captures, $syncedStreets streets",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("Sync", "Sync failed", e)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Sync failed: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
-            } finally {
-                isSyncing.value = false
-            }
+        isSyncing.value = true
+        viewModel.sync { msg ->
+            isSyncing.value = false
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -192,7 +118,6 @@ fun DashboardScreen(
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
-                Divider()
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.List, contentDescription = null) },
                     label = { Text("View Records") },
