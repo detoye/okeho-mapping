@@ -19,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -35,6 +36,12 @@ fun StreetDetailsScreen(
     viewModel: StreetMappingViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(uiState.isSaved) {
+        if (uiState.isSaved) {
+            onSaved()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -113,18 +120,33 @@ fun StreetDetailsScreen(
                 style = MaterialTheme.typography.bodyMedium
             )
 
+            if (uiState.points.size < StreetMappingViewModel.MIN_POINTS) {
+                Text(
+                    "A street needs at least ${StreetMappingViewModel.MIN_POINTS} points.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            uiState.error?.let { error ->
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = {
-                    val street = viewModel.getStreet()
-                    viewModel.markSaved()
-                    onSaved()
-                },
+                onClick = { viewModel.saveStreet() },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = uiState.streetName.isNotBlank() && uiState.points.isNotEmpty()
+                enabled = !uiState.isSaving &&
+                    uiState.streetName.isNotBlank() &&
+                    uiState.points.size >= StreetMappingViewModel.MIN_POINTS
             ) {
-                Text("Save Street")
+                Text(if (uiState.isSaving) "Saving..." else "Save Street")
             }
         }
     }

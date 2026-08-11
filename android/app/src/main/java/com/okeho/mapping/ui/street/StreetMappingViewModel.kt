@@ -3,6 +3,7 @@ package com.okeho.mapping.ui.street
 import android.content.Context
 import android.location.Location
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -10,11 +11,14 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
 import com.okeho.mapping.domain.model.Street
 import com.okeho.mapping.domain.model.SurfaceType
+import com.okeho.mapping.domain.model.SyncStatus
 import com.okeho.mapping.domain.model.TrafficDirection
+import com.okeho.mapping.domain.repository.StreetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class StreetMappingUiState(
@@ -30,7 +34,9 @@ data class StreetMappingUiState(
 )
 
 @HiltViewModel
-class StreetMappingViewModel @Inject constructor() : ViewModel() {
+class StreetMappingViewModel @Inject constructor(
+    private val streetRepository: StreetRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StreetMappingUiState())
     val uiState: StateFlow<StreetMappingUiState> = _uiState.asStateFlow()
@@ -116,18 +122,31 @@ class StreetMappingViewModel @Inject constructor() : ViewModel() {
         _uiState.value = _uiState.value.copy(trafficDirection = direction)
     }
 
-    fun getStreet(): Street {
+    fun saveStreet() {
         val state = _uiState.value
-        return Street(
-            name = state.streetName,
-            points = state.points,
-            surfaceType = state.surfaceType,
-            trafficDirection = state.trafficDirection
-        )
-    }
+        if (state.streetName.isBlank() || state.points.size < MIN_POINTS) return
 
-    fun markSaved() {
-        _uiState.value = _uiState.value.copy(isSaved = true)
+        viewModelScope.launch {
+            _uiState.value = state.copy(isSaving = true, error = null)
+
+            try {
+                val street = Street(
+                    name = state.streetName,
+                    points = state.points,
+                    surfaceType = state.surfaceType,
+                    trafficDirection = state.trafficDirection,
+                    syncStatus = SyncStatus.PENDING
+                )
+
+                streetRepository.insertStreet(street)
+                _uiState.value = _uiState.value.copy(isSaving = false, isSaved = true)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    error = "Failed to save: ${e.message}"
+                )
+            }
+        }
     }
 
     override fun onCleared() {
@@ -135,5 +154,10 @@ class StreetMappingViewModel @Inject constructor() : ViewModel() {
         locationCallback?.let { callback ->
             fusedLocationClient?.removeLocationUpdates(callback)
         }
+    }
+
+    companion object {
+        /** A PostGIS LINESTRING needs at least two vertices, so a one-point street can never sync. */
+        const val MIN_POINTS = 2
     }
 }

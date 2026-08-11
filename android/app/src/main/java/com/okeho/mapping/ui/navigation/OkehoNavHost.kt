@@ -1,6 +1,8 @@
 package com.okeho.mapping.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -62,8 +64,15 @@ fun OkehoNavHost(
             )
         }
 
-        composable(Screen.StreetDetails.route) {
+        // Scoped to the StreetMapping entry so both steps of the flow share one
+        // ViewModel; with a plain hiltViewModel() this screen would get its own
+        // instance and never see the points captured on the previous screen.
+        composable(Screen.StreetDetails.route) { backStackEntry ->
+            val mappingEntry = remember(backStackEntry) {
+                navController.getBackStackEntry(Screen.StreetMapping.route)
+            }
             StreetDetailsScreen(
+                viewModel = hiltViewModel(mappingEntry),
                 onSaved = {
                     navController.popBackStack(Screen.Dashboard.route, false)
                 },
