@@ -34,4 +34,7 @@ interface CaptureDao {
 
     @Query("UPDATE captures SET syncStatus = :status WHERE id = :id")
     suspend fun updateSyncStatus(id: String, status: String)
+
+    @Query("SELECT COUNT(*) FROM captures WHERE syncStatus IN ('PENDING', 'FAILED')")
+    suspend fun countUnsynced(): Int
 }

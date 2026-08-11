@@ -34,4 +34,7 @@ interface StreetDao {
 
     @Query("UPDATE streets SET syncStatus = :status WHERE id = :id")
     suspend fun updateSyncStatus(id: String, status: String)
+
+    @Query("SELECT COUNT(*) FROM streets WHERE syncStatus IN ('PENDING', 'FAILED')")
+    suspend fun countUnsynced(): Int
 }

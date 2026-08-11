@@ -3,13 +3,15 @@ package com.okeho.mapping.ui.dashboard
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.okeho.mapping.data.remote.SupabaseClient
+import com.okeho.mapping.data.remote.AuthManager
 import com.okeho.mapping.data.remote.CaptureDto
+import com.okeho.mapping.data.remote.PhotoUploader
 import com.okeho.mapping.data.remote.StreetDto
 import com.okeho.mapping.domain.model.SyncStatus
 import com.okeho.mapping.domain.repository.CaptureRepository
 import com.okeho.mapping.domain.repository.StreetRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +27,10 @@ data class SyncResult(val message: String, val success: Boolean)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val captureRepository: CaptureRepository,
-    private val streetRepository: StreetRepository
+    private val streetRepository: StreetRepository,
+    private val client: SupabaseClient,
+    private val authManager: AuthManager,
+    private val photoUploader: PhotoUploader
 ) : ViewModel() {
 
     private val _syncState = MutableStateFlow<String?>(null)
@@ -48,7 +53,8 @@ class DashboardViewModel @Inject constructor(
     }
 
     private suspend fun runSync(): String {
-        val client = SupabaseClient.getClient()
+        val userId = authManager.currentUserId
+            ?: return "Not signed in -- sign in to sync"
 
         val pendingCaptures = captureRepository.getPendingCaptures()
         Log.d("Sync", "Pending captures: ${pendingCaptures.size}")
@@ -57,14 +63,28 @@ class DashboardViewModel @Inject constructor(
         var failed = 0
         for (capture in pendingCaptures) {
             try {
+                // A device-local URI is meaningless to the server, so it is
+                // uploaded and replaced by its object path. If that upload
+                // fails the column goes null rather than keeping the URI: the
+                // record itself is the valuable part and still syncs, and a
+                // null reads honestly as "no photo on the server". Any other
+                // value is already an object path from an earlier sync.
+                val localPhoto = capture.photoUrl?.takeIf {
+                    it.startsWith("content://") || it.startsWith("file://")
+                }
+                val photoPath = if (localPhoto != null) {
+                    photoUploader.upload(localPhoto, capture.id, userId)
+                } else {
+                    capture.photoUrl
+                }
                 val dto = CaptureDto(
                     id = capture.id,
-                    user_id = capture.userId.ifBlank { null },
+                    user_id = userId,
                     name = capture.name,
                     feature_type = capture.featureType.name.lowercase(),
                     geometry = pointWkt(capture.latitude, capture.longitude),
                     accuracy = capture.accuracy,
-                    photo_url = capture.photoUrl,
+                    photo_url = photoPath,
                     ocr_text = capture.ocrText,
                     sync_status = "synced"
                 )
@@ -92,7 +112,7 @@ class DashboardViewModel @Inject constructor(
             try {
                 val dto = StreetDto(
                     id = street.id,
-                    user_id = street.userId.ifBlank { null },
+                    user_id = userId,
                     name = street.name,
                     geometry = lineWkt(street.points),
                     surface_type = street.surfaceType.name.lowercase(),

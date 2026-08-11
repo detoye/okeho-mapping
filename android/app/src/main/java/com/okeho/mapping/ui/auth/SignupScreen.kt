@@ -28,8 +28,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
-fun LoginScreen(
-    onNavigateToSignup: () -> Unit,
+fun SignupScreen(
+    onNavigateToLogin: () -> Unit,
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -44,17 +44,31 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(48.dp))
 
         Text(
-            text = "Okeho Mapping",
+            text = "Create Account",
             style = MaterialTheme.typography.headlineLarge
         )
 
         Text(
-            text = "Ground-Truth Data. Better Maps. Better Okeho.",
+            text = "Your captures stay tied to this account.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
+
+        OutlinedTextField(
+            value = uiState.fullName,
+            onValueChange = viewModel::updateFullName,
+            label = { Text("Full name") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Text,
+                imeAction = ImeAction.Next
+            )
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = uiState.email,
@@ -74,6 +88,21 @@ fun LoginScreen(
             value = uiState.password,
             onValueChange = viewModel::updatePassword,
             label = { Text("Password") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Next
+            )
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = uiState.confirmPassword,
+            onValueChange = viewModel::updateConfirmPassword,
+            label = { Text("Confirm password") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -104,11 +133,13 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = viewModel::signIn,
+            onClick = viewModel::signUp,
             modifier = Modifier.fillMaxWidth(),
             enabled = !uiState.isLoading &&
+                uiState.fullName.isNotBlank() &&
                 uiState.email.isNotBlank() &&
-                uiState.password.isNotBlank()
+                uiState.password.isNotBlank() &&
+                uiState.confirmPassword.isNotBlank()
         ) {
             if (uiState.isLoading) {
                 CircularProgressIndicator(
@@ -117,29 +148,20 @@ fun LoginScreen(
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             } else {
-                Text("Sign In")
+                Text("Sign Up")
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Uses whatever is already typed in the email field, so there is no
-        // second screen to maintain just to collect an address.
-        TextButton(
-            onClick = viewModel::sendPasswordReset,
-            enabled = !uiState.isLoading
-        ) {
-            Text("Forgot password?")
-        }
-
         TextButton(
             onClick = {
                 viewModel.resetTransient()
-                onNavigateToSignup()
+                onNavigateToLogin()
             },
             enabled = !uiState.isLoading
         ) {
-            Text("Create account")
+            Text("Already have an account? Sign in")
         }
     }
 }
