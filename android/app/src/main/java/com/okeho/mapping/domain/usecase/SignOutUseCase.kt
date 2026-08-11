@@ -2,6 +2,8 @@ package com.okeho.mapping.domain.usecase
 
 import com.okeho.mapping.data.local.OkehoDatabase
 import com.okeho.mapping.data.remote.AuthManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -22,7 +24,7 @@ class SignOutUseCase @Inject constructor(
     private val db: OkehoDatabase
 ) {
     suspend operator fun invoke(): Result<Unit> {
-        db.clearAllTables()
+        withContext(Dispatchers.IO) { db.clearAllTables() }
         return authManager.signOut()
     }
 }
