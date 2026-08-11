@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -34,6 +37,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.okeho.mapping.ui.components.SignOutConfirmDialog
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -100,6 +106,26 @@ fun DashboardScreen(
     }
 
     val mapView = remember { mutableStateOf<MapView?>(null) }
+    val accountState by viewModel.accountState.collectAsState()
+    val showSignOutConfirm = remember { mutableStateOf(false) }
+
+    // Refresh when the drawer opens rather than once at composition, so the
+    // unsynced count in the confirm dialog is current at the moment it matters.
+    LaunchedEffect(drawerState.isOpen) {
+        if (drawerState.isOpen) viewModel.refreshAccount()
+    }
+
+    if (showSignOutConfirm.value) {
+        SignOutConfirmDialog(
+            pendingCount = accountState.pendingCount,
+            onConfirm = {
+                showSignOutConfirm.value = false
+                scope.launch { drawerState.close() }
+                viewModel.signOut()
+            },
+            onDismiss = { showSignOutConfirm.value = false }
+        )
+    }
 
     fun doSync() {
         isSyncing.value = true
@@ -114,11 +140,22 @@ fun DashboardScreen(
         drawerContent = {
             ModalDrawerSheet {
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    "Okeho Mapping",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        "Okeho Mapping",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    accountState.name?.let { name ->
+                        Text(name, style = MaterialTheme.typography.bodyLarge)
+                    }
+                    Text(
+                        accountState.email ?: "Not signed in",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.List, contentDescription = null) },
                     label = { Text("View Records") },
@@ -162,6 +199,23 @@ fun DashboardScreen(
                         doSync()
                     }
                 )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text("Settings") },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onSettings()
+                    }
+                )
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Logout, contentDescription = null) },
+                    label = { Text("Sign Out") },
+                    selected = false,
+                    onClick = { showSignOutConfirm.value = true }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
             }
         }
     ) {

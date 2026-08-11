@@ -10,6 +10,7 @@ import com.okeho.mapping.data.remote.StreetDto
 import com.okeho.mapping.domain.model.SyncStatus
 import com.okeho.mapping.domain.repository.CaptureRepository
 import com.okeho.mapping.domain.repository.StreetRepository
+import com.okeho.mapping.domain.usecase.SignOutUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.from
@@ -24,17 +25,56 @@ import javax.inject.Inject
 
 data class SyncResult(val message: String, val success: Boolean)
 
+data class AccountState(
+    val name: String? = null,
+    val email: String? = null,
+    val pendingCount: Int = 0,
+    val isSigningOut: Boolean = false
+)
+
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val captureRepository: CaptureRepository,
     private val streetRepository: StreetRepository,
     private val client: SupabaseClient,
     private val authManager: AuthManager,
-    private val photoUploader: PhotoUploader
+    private val photoUploader: PhotoUploader,
+    private val signOutUseCase: SignOutUseCase
 ) : ViewModel() {
 
     private val _syncState = MutableStateFlow<String?>(null)
     val syncState: StateFlow<String?> = _syncState.asStateFlow()
+
+    private val _accountState = MutableStateFlow(AccountState())
+    val accountState: StateFlow<AccountState> = _accountState.asStateFlow()
+
+    /** Refreshes the drawer header. Called when the drawer opens. */
+    fun refreshAccount() {
+        viewModelScope.launch {
+            val pending = captureRepository.getPendingCaptures().size +
+                streetRepository.getPendingStreets().size
+            _accountState.value = _accountState.value.copy(
+                name = authManager.currentUserName,
+                email = authManager.currentUserEmail,
+                pendingCount = pending
+            )
+        }
+    }
+
+    /**
+     * Signs out and wipes local data via [SignOutUseCase]. The auth gate in
+     * MainActivity swaps to the login graph off sessionStatus, so there is no
+     * navigation to do here.
+     */
+    fun signOut() {
+        viewModelScope.launch {
+            _accountState.value = _accountState.value.copy(isSigningOut = true)
+            signOutUseCase().onFailure {
+                Log.e("Auth", "Sign out failed", it)
+                _accountState.value = _accountState.value.copy(isSigningOut = false)
+            }
+        }
+    }
 
     fun sync(onDone: (String) -> Unit) {
         viewModelScope.launch {

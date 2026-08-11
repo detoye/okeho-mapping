@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.okeho.mapping.ui.components.SignOutConfirmDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,36 +45,13 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     if (showSignOutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showSignOutConfirm = false },
-            title = { Text("Sign out?") },
-            text = {
-                Text(
-                    if (uiState.pendingCount > 0) {
-                        "You have ${uiState.pendingCount} record(s) that have not synced " +
-                            "yet. Signing out erases the records on this device, so those " +
-                            "unsynced ones will be lost. Sync first if you want to keep them."
-                    } else {
-                        "Records on this device will be erased. Everything already synced " +
-                            "stays on the server and comes back when you sign in again."
-                    }
-                )
+        SignOutConfirmDialog(
+            pendingCount = uiState.pendingCount,
+            onConfirm = {
+                showSignOutConfirm = false
+                viewModel.signOut()
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSignOutConfirm = false
-                        viewModel.signOut()
-                    }
-                ) {
-                    Text("Sign out")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOutConfirm = false }) {
-                    Text("Cancel")
-                }
-            }
+            onDismiss = { showSignOutConfirm = false }
         )
     }
 
@@ -111,9 +87,16 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    uiState.name?.let { name ->
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
                     Text(
                         text = uiState.email ?: "Not signed in",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (uiState.pendingCount > 0) {
                         Text(

@@ -6,6 +6,8 @@ import io.github.jan.supabase.gotrue.auth
 import io.github.jan.supabase.gotrue.providers.builtin.Email
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +33,20 @@ class AuthManager @Inject constructor(
 
     val currentUserEmail: String?
         get() = client.auth.currentUserOrNull()?.email
+
+    /**
+     * The name given at sign-up, from user metadata. Null for accounts created
+     * before the name field existed, or created outside the app, so callers
+     * must have a fallback rather than assuming a name is present.
+     */
+    val currentUserName: String?
+        get() = client.auth.currentUserOrNull()
+            ?.userMetadata
+            ?.get("full_name")
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
     suspend fun signIn(email: String, password: String): Result<Unit> = runCatching {
         client.auth.signInWith(Email) {
