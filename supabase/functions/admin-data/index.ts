@@ -34,8 +34,21 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // Parse optional query params for filtering
     const url = new URL(req.url);
+
+    // ─── DELETE ALL ─────────────────────────────────────────────────
+    if (req.method === "DELETE") {
+      const { error: e1 } = await supabase.from("captures").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from("streets").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if (e2) throw e2;
+      return new Response(
+        JSON.stringify({ ok: true, message: "All captures and streets deleted" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ─── GET (fetch data) ──────────────────────────────────────────
     const featureType = url.searchParams.get("feature_type");
 
     // Fetch captures
